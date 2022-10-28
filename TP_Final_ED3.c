@@ -31,7 +31,7 @@ void onTimer1();
 void offTimer1();
 
 void setDac();
-void onDac();
+void onDac(int);
 void offDac();
 
 void setDMA();
@@ -50,9 +50,11 @@ int main(void) {
 	setPins();
 	setTimer0Adc();
 	setTimer1Riego();
-	setDMA();
+	//setDMA();
+	//setDac();
 	setAdc();
 	onAdc();
+	//onDac(4500);
     while(1){}
     return 0 ;
 }
@@ -78,7 +80,7 @@ void setPins(){
 
 	//configuramos el p0.0 como salida para riego
 	GPIO_SetDir(0, 0x1, 1);//Configuramos p0.0 como salida
-	GPIO_ClearValue(0, 0x1);//Seteo en 0 la salida
+	GPIO_ClearValue(0, 0x1);//Seteo en 0 la salida, //CAMBIAR
 
 }
 
@@ -86,7 +88,7 @@ void setPins(){
 void setTimer0Adc(){
 	TIM_TIMERCFG_Type timStruc;
 	timStruc.PrescaleOption = TIM_PRESCALE_USVAL;
-	timStruc.PrescaleValue = 30000000;//para hacer 30 seg
+	timStruc.PrescaleValue = 3000000;//para hacer 30 seg 30000000
 
 	TIM_MATCHCFG_Type matchConf;
 	matchConf.MatchChannel = 1;//para mat0.1
@@ -105,15 +107,18 @@ void setAdc(){
 	ADC_ChannelCmd(LPC_ADC, ADC_CHANNEL_0, ENABLE);
 	ADC_IntConfig(LPC_ADC, ADC_ADINTEN0, ENABLE);
 	ADC_EdgeStartConfig(LPC_ADC, ADC_START_ON_FALLING);
-	NVIC_EnableIRQ(ADC_IRQn);
+	//NVIC_EnableIRQ(ADC_IRQn);
 }
 void onAdc(){
 	TIM_ResetCounter(LPC_TIM0);//reseteamos el tim0
 	TIM_Cmd(LPC_TIM0, ENABLE);//Prendemos el tim0
 	ADC_StartCmd(LPC_ADC, ADC_START_ON_MAT01);
+	NVIC_EnableIRQ(ADC_IRQn);
 }
 void offAdc(){
 	TIM_Cmd(LPC_TIM0, DISABLE);//Apagamos el tim0 por lo que el adc no convierte.
+	NVIC_DisableIRQ(ADC_IRQn);
+
 }
 //funciones riego
 void setTimer1Riego(){
@@ -131,7 +136,7 @@ void setTimer1Riego(){
 
 	TIM_MATCHCFG_Type match1;
 	match1.MatchChannel = 1;//para match0
-	match1.MatchValue = 240;//para que sea 5 seg de riego
+	match1.MatchValue = 3;//para que sea 20 min sin tomar medicion 240
 	match1.IntOnMatch = ENABLE;
 	match1.ResetOnMatch = ENABLE;
 	match1.StopOnMatch = ENABLE;
@@ -184,8 +189,8 @@ void setDac(){
 	DAC_ConfigDAConverterControl(LPC_DAC, &dacStruc);
 
 }
-void onDac(){
-	uint32_t time_out=25000000/(4500*60);//4500 frec de la onda
+void onDac(int frecuencia){
+	uint32_t time_out=25000000/(frecuencia*60);//4500 frec de la onda
 	DAC_SetDMATimeOut(LPC_DAC,time_out);
 	GPDMA_ChannelCmd(0, ENABLE); //Enciende el modulo DMA
 }
@@ -193,17 +198,20 @@ void offDac(){}
 
 //handlers de interrupciones
 void ADC_IRQHandler(){
-	if(ADC_ChannelGetData(LPC_ADC, 0)>550){
+	//if(ADC_ChannelGetData(LPC_ADC, 0)>650){
+	int val= (LPC_ADC->ADDR0>>4 & (0xfff));
+	if(val>3800){
 		GPIO_SetValue(0, 0x1);//enciendo la bomba
 		onTimer1();
 		offAdc();
 	}
+	//else{GPIO_ClearValue(0, 0x1);}//no hago nada}
 }
 
 void TIMER1_IRQHandler(){
-	if(TIM_GetIntStatus(LPC_TIM1, TIM_MR0_INT)){
+	if(TIM_GetIntStatus(LPC_TIM1, TIM_MR0_INT)==SET){
 		GPIO_ClearValue(0, 0x1);//Apago la bomba
-	}else if(TIM_GetIntStatus(LPC_TIM1, TIM_MR1_INT)){
+	}else if(TIM_GetIntStatus(LPC_TIM1, TIM_MR1_INT)==SET){
 		offTimer1();
 		onAdc();
 	}
