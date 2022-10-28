@@ -37,8 +37,9 @@ void offDac();
 void setDMA();
 //
 GPDMA_Channel_CFG_Type GPDMACfg;
-//GPDMA_LLI_Type DMA_LLI_Struct;
+GPDMA_LLI_Type DMA_LLI_Struct;
 
+//Estos valores ya se encuentran desplazados 6 lugares a la derecha para cargarlos en DACR
 uint32_t sinu[60]={32768, 36160, 39552, 42880, 46080, 49152, 51968, 54656, 57088, 59264
 , 61120, 62656, 63872, 64768, 65344, 65472, 65344, 64768, 63872, 62656, 61120, 59264
 , 57088, 54656, 51968, 49152, 46080, 42880, 39552, 36160, 32768, 29376, 25984, 22656
@@ -154,7 +155,6 @@ void offTimer1(){
 	NVIC_DisableIRQ(TIMER1_IRQn);
 }
 void setDMA(){
-	GPDMA_LLI_Type DMA_LLI_Struct;
 	DMA_LLI_Struct.SrcAddr= (uint32_t)sinu;
 	DMA_LLI_Struct.DstAddr= (uint32_t)&(LPC_DAC->DACR);
 	DMA_LLI_Struct.NextLLI= (uint32_t)&DMA_LLI_Struct;
@@ -171,7 +171,7 @@ void setDMA(){
 	GPDMACfg.TransferWidth = 0;
 	GPDMACfg.TransferType = GPDMA_TRANSFERTYPE_M2P;
 	GPDMACfg.SrcConn = 0;
-	GPDMACfg.DstConn = (uint32_t)&(LPC_DAC->DACR);
+	GPDMACfg.DstConn = GPDMA_CONN_DAC;
 	GPDMACfg.DMALLI= (uint32_t)&DMA_LLI_Struct;
 	GPDMA_Setup(&GPDMACfg);
 }
@@ -185,7 +185,7 @@ void setDac(){
 
 }
 void onDac(){
-	uint32_t time_out=25000000/(262*60);//262 frec de la onda
+	uint32_t time_out=25000000/(4500*60);//4500 frec de la onda
 	DAC_SetDMATimeOut(LPC_DAC,time_out);
 	GPDMA_ChannelCmd(0, ENABLE); //Enciende el modulo DMA
 }
@@ -193,7 +193,7 @@ void offDac(){}
 
 //handlers de interrupciones
 void ADC_IRQHandler(){
-	if(1/*ADC_ChannelGetData>550*/){
+	if(ADC_ChannelGetData(LPC_ADC, 0)>550){
 		GPIO_SetValue(0, 0x1);//enciendo la bomba
 		onTimer1();
 		offAdc();
@@ -210,5 +210,3 @@ void TIMER1_IRQHandler(){
 	TIM_ClearIntPending(LPC_TIM1, TIM_MR0_INT);
 	TIM_ClearIntPending(LPC_TIM1, TIM_MR1_INT);
 }
-
-
