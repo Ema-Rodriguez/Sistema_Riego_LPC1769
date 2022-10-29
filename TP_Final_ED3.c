@@ -33,6 +33,7 @@ void offTimer1();
 void setDac();
 void onDac(int);
 void offDac();
+void setRiegoMan();
 
 void setDMA();
 //
@@ -53,6 +54,7 @@ int main(void) {
 	//setDMA();
 	//setDac();
 	setAdc();
+	setRiegoMan();
 	onAdc();
 	//onDac(4500);
     while(1){}
@@ -63,13 +65,14 @@ int main(void) {
 void setPins(){
 	PINSEL_CFG_Type pinAdc;
 	PINSEL_CFG_Type pinDac;
+	PINSEL_CFG_Type pinRiegoMan;
 
 	pinAdc.Portnum= PINSEL_PORT_0;
 	pinAdc.Pinnum= PINSEL_PIN_23;
 	pinAdc.Funcnum= PINSEL_FUNC_1;
 	pinAdc.Pinmode= PINSEL_PINMODE_TRISTATE;
 	pinAdc.OpenDrain= PINSEL_PINMODE_NORMAL;
-	PINSEL_ConfigPin(&pinAdc);//Configuramos AD0.0
+
 
 	pinDac.Portnum= PINSEL_PORT_0;
 	pinDac.Pinnum= PINSEL_PIN_26;
@@ -78,9 +81,15 @@ void setPins(){
 	pinDac.OpenDrain= PINSEL_PINMODE_NORMAL;
 	PINSEL_ConfigPin(&pinDac);//Configuramos AOUT
 
+
 	//configuramos el p0.0 como salida para riego
 	GPIO_SetDir(0, 0x1, 1);//Configuramos p0.0 como salida
 	GPIO_ClearValue(0, 0x1);//Seteo en 0 la salida, //CAMBIAR
+
+	//configuramos el p0.21 Para activar riego manual
+	//GPIO_SetDir(0, 0x1, 0);//Configuramos p0.21 como salida
+	LPC_GPIO0->FIODIR |= (1<<21);//0,21 como salida
+	LPC_GPIO0->FIOSET |= (1<<21);//Seteo en 1 la entrada.
 
 }
 
@@ -196,15 +205,21 @@ void onDac(int frecuencia){
 }
 void offDac(){}
 
+void setRiegoMan(){
+	LPC_GPIOINT->IO0IntEnF |= (1<<21);
+	LPC_GPIOINT->IO0IntClr |= (1<<21);
+	NVIC_EnableIRQ(EINT3_IRQn);
+	//NVIC_SetPriority(EINT3_IRQn, priority);
+}
 //handlers de interrupciones
 void ADC_IRQHandler(){
 	//if(ADC_ChannelGetData(LPC_ADC, 0)>650){
 	int val= (LPC_ADC->ADDR0>>4 & (0xfff));
 	if(val>3800){
 		GPIO_SetValue(0, 0x1);//enciendo la bomba
-		onTimer1();
-		offAdc();
 	}
+	onTimer1();
+	offAdc();
 	//else{GPIO_ClearValue(0, 0x1);}//no hago nada}
 }
 
@@ -217,4 +232,10 @@ void TIMER1_IRQHandler(){
 	}
 	TIM_ClearIntPending(LPC_TIM1, TIM_MR0_INT);
 	TIM_ClearIntPending(LPC_TIM1, TIM_MR1_INT);
+}
+
+void EINT3_IRQHandler(){
+	onTimer1();
+	GPIO_SetValue(0, 0x1);//prendo la bomba
+	LPC_GPIOINT->IO0IntClr |= (1<<21);
 }
