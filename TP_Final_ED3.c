@@ -19,6 +19,8 @@
 #include "lpc17xx_dac.h"
 #include "lpc17xx_timer.h"
 #include "lpc17xx_gpdma.h"
+#include "lpc17xx_uart.h"
+#include <string.h>
 
 //Declaracion de funciones
 void setPins();//Configuracion de los pines
@@ -30,20 +32,26 @@ void setTimer2Riego();//timer para activar bomba de riego
 void onTimer2();
 void offTimer2();
 
-void setTimer1Control();//timer para medir nivel de agua
-void onTimer1();
-void offTimer1();
-uint32_t ControlarNivel();
-
 void setDac();
 void onDac(int);
 void offDac();
 void setRiegoMan();
 
-void setDMA();
+void confUart();
+void confDMA_UART();
+void actualizarMensaje();
+
+void setDMA_DAC();
+
+uint_fast16_t potencia(uint8_t , uint_fast8_t );
 //
-GPDMA_Channel_CFG_Type GPDMACfg;
-GPDMA_LLI_Type DMA_LLI_Struct;
+GPDMA_Channel_CFG_Type GPDMACfg_DAC;
+GPDMA_LLI_Type DMA_LLI_Struct_DAC;
+
+GPDMA_LLI_Type DMA_LLI_Struct_UART;
+GPDMA_Channel_CFG_Type GPDMACfg_UART;
+
+uint8_t mensaje[] = {"PORCENTAJE DE HUMEDAD: \r  \n"};
 
 //Estos valores ya se encuentran desplazados 6 lugares a la derecha para cargarlos en DACR
 uint32_t sinu[60]={32768, 36160, 39552, 42880, 46080, 49152, 51968, 54656, 57088, 59264
@@ -55,13 +63,17 @@ uint32_t sinu[60]={32768, 36160, 39552, 42880, 46080, 49152, 51968, 54656, 57088
 uint32_t medido=0;
 uint32_t inicio=0;
 uint32_t final=0;
+uint32_t distancia=0;
+uint8_t humedad=0;
 int cont=0;
 
 int main(void) {
 	setPins();
 	setTimer0Adc();
 	setTimer2Riego();
-	//setDMA();
+	confUart();
+	confDMA_UART();
+	//setDMA_DAC();
 	//setDac();
 	setAdc();
 	setRiegoMan();
@@ -76,7 +88,7 @@ void setPins(){
 	PINSEL_CFG_Type pinAdc;
 	PINSEL_CFG_Type pinDac;
 	PINSEL_CFG_Type pinCap;
-	PINSEL_CFG_Type pinMatch;
+	//PINSEL_CFG_Type pinMatch;
 
 	pinAdc.Portnum= PINSEL_PORT_0;
 	pinAdc.Pinnum= PINSEL_PIN_23;
@@ -100,12 +112,8 @@ void setPins(){
 	pinCap.OpenDrain= PINSEL_PINMODE_NORMAL;
 	PINSEL_ConfigPin(&pinCap);//Configuramos CAP1.0
 
-	pinMatch.Portnum= PINSEL_PORT_1;
-	pinMatch.Pinnum= PINSEL_PIN_22;
-	pinMatch.Funcnum= PINSEL_FUNC_3;
-	pinMatch.Pinmode= PINSEL_PINMODE_TRISTATE;
-	pinMatch.OpenDrain= PINSEL_PINMODE_NORMAL;
-	PINSEL_ConfigPin(&pinMatch);//Configuramos MAT1.0
+	LPC_GPIO1->FIODIR |= (1<<22);//Seteo como salida P1.22 para señal
+	LPC_GPIO1->FIOCLR |= (1<<22);//Seteo en 0
 
 	//configuramos el p0.0 como salida para riego
 	GPIO_SetDir(0, 0x1, 1);//Configuramos p0.0 como salida
@@ -193,26 +201,26 @@ void offTimer2(){
 	TIM_Cmd(LPC_TIM2, DISABLE);
 	NVIC_DisableIRQ(TIMER2_IRQn);
 }
-void setDMA(){
-	DMA_LLI_Struct.SrcAddr= (uint32_t)sinu;
-	DMA_LLI_Struct.DstAddr= (uint32_t)&(LPC_DAC->DACR);
-	DMA_LLI_Struct.NextLLI= (uint32_t)&DMA_LLI_Struct;
-	DMA_LLI_Struct.Control= 60
+void setDMA_DAC(){
+	DMA_LLI_Struct_DAC.SrcAddr= (uint32_t)sinu;
+	DMA_LLI_Struct_DAC.DstAddr= (uint32_t)&(LPC_DAC->DACR);
+	DMA_LLI_Struct_DAC.NextLLI= (uint32_t)&DMA_LLI_Struct_DAC;
+	DMA_LLI_Struct_DAC.Control= 60
 			| (2<<18)//Fuente: 32bits
 			| (2<<21)//Destino: 32bit
 			| (1<<26)//Incremento automático de la fuente
 			;
 	GPDMA_Init();
-	GPDMACfg.ChannelNum = 0;
-	GPDMACfg.SrcMemAddr = (uint32_t)sinu;
-	GPDMACfg.DstMemAddr = 0;
-	GPDMACfg.TransferSize = 60;
-	GPDMACfg.TransferWidth = 0;
-	GPDMACfg.TransferType = GPDMA_TRANSFERTYPE_M2P;
-	GPDMACfg.SrcConn = 0;
-	GPDMACfg.DstConn = GPDMA_CONN_DAC;
-	GPDMACfg.DMALLI= (uint32_t)&DMA_LLI_Struct;
-	GPDMA_Setup(&GPDMACfg);
+	GPDMACfg_DAC.ChannelNum = 0;
+	GPDMACfg_DAC.SrcMemAddr = (uint32_t)sinu;
+	GPDMACfg_DAC.DstMemAddr = 0;
+	GPDMACfg_DAC.TransferSize = 60;
+	GPDMACfg_DAC.TransferWidth = 0;
+	GPDMACfg_DAC.TransferType = GPDMA_TRANSFERTYPE_M2P;
+	GPDMACfg_DAC.SrcConn = 0;
+	GPDMACfg_DAC.DstConn = GPDMA_CONN_DAC;
+	GPDMACfg_DAC.DMALLI= (uint32_t)&DMA_LLI_Struct_DAC;
+	GPDMA_Setup(&GPDMACfg_DAC);
 }
 void setDac(){
 	DAC_CONVERTER_CFG_Type dacStruc;
@@ -237,74 +245,126 @@ void setRiegoMan(){
 	//NVIC_SetPriority(EINT3_IRQn, priority);
 }
 
-void setTimer1Control(){
-	TIM_TIMERCFG_Type tim1Struc;
-	tim1Struc.PrescaleOption = TIM_PRESCALE_USVAL;
-	tim1Struc.PrescaleValue = 10;//para hacer 10uS
 
-	TIM_MATCHCFG_Type match0Conf;
-	match0Conf.MatchChannel = 0;//para mat1.0
-	match0Conf.MatchValue = 1;
-	match0Conf.IntOnMatch = DISABLE;
-	match0Conf.ResetOnMatch = DISABLE;
-	match0Conf.StopOnMatch = DISABLE;
-	match0Conf.ExtMatchOutputType = TIM_EXTMATCH_LOW;
+void confUart(void)
+{
+	PINSEL_CFG_Type PinCfg;
+	//configuracion pin de Tx y Rx
+	PinCfg.Funcnum = PINSEL_FUNC_1;
+	PinCfg.OpenDrain = PINSEL_PINMODE_NORMAL;
+	PinCfg.Pinmode = PINSEL_PINMODE_PULLUP;
+	PinCfg.Pinnum = PINSEL_PIN_2;
+	PinCfg.Portnum = PINSEL_PORT_0;
+	PINSEL_ConfigPin(&PinCfg);
+	PinCfg.Pinnum = PINSEL_PIN_3;
+	PINSEL_ConfigPin(&PinCfg);
 
-	TIM_CAPTURECFG_Type capture0;
-	capture0.CaptureChannel = 0; //cap1.0
-	capture0.RisingEdge = ENABLE;
-	capture0.FallingEdge = ENABLE;
-	capture0.IntOnCaption = ENABLE;
+	UART_CFG_Type UARTConfigStruct;
+	UART_FIFO_CFG_Type UARTFIFOConfigStruct;
 
-	TIM_Init(LPC_TIM1, TIM_TIMER_MODE, &tim1Struc);
-	TIM_ConfigMatch(LPC_TIM1, &match0Conf);//configuramos el match
-	TIM_ConfigCapture(LPC_TIM1, &capture0);//configuramos el capture
+	//configuracion por defecto:
+	UART_ConfigStructInit(&UARTConfigStruct);
+	//inicializa periferico
+	UART_Init(LPC_UART0, &UARTConfigStruct);
+
+	//configuro la FIFO para DMA
+	UARTFIFOConfigStruct.FIFO_DMAMode = ENABLE;
+	UARTFIFOConfigStruct.FIFO_Level = UART_FIFO_TRGLEV0;
+	UARTFIFOConfigStruct.FIFO_ResetRxBuf = ENABLE;
+	UARTFIFOConfigStruct.FIFO_ResetTxBuf = ENABLE;
+
+	//Inicializa FIFO
+	UART_FIFOConfig(LPC_UART0, &UARTFIFOConfigStruct);
+	//Habilita transmision
+	UART_TxCmd(LPC_UART0, ENABLE);
+}
+void confDMA_UART(void)
+{
+	//Preparo la LLI del DMA
+	DMA_LLI_Struct_UART.SrcAddr= (uint32_t)mensaje;
+	DMA_LLI_Struct_UART.DstAddr= (uint32_t)&LPC_UART0->THR;
+	DMA_LLI_Struct_UART.NextLLI= (uint32_t)&DMA_LLI_Struct_UART;
+	DMA_LLI_Struct_UART.Control= sizeof(mensaje)
+		| 	(2<<12)
+		| 	(1<<26) //source increment
+		;
+
+	// Desabilito la interrupcion de GDMA
+	NVIC_DisableIRQ(DMA_IRQn);
+	// Inicializo controlador de GPDMA
+	GPDMA_Init();
+	//Configuracion del canal 0
+	// CANAL 0
+	GPDMACfg_UART.ChannelNum = 1;
+	// Fuente de memoria
+	GPDMACfg_UART.SrcMemAddr = (uint32_t)mensaje;
+	// Destino de memoria, al ser periferico es 0
+	GPDMACfg_UART.DstMemAddr = 0;
+	// tamaño de trasnferencia
+	GPDMACfg_UART.TransferSize = sizeof(mensaje);
+	// Ancho de trasnferencia
+	GPDMACfg_UART.TransferWidth = 0;
+	// Tipo de memoria
+	GPDMACfg_UART.TransferType = GPDMA_TRANSFERTYPE_M2P;
+	// Coneccion de la Fuente, sin usar al ser periferico
+	GPDMACfg_UART.SrcConn = 0;
+	// Coneccion de destino
+	GPDMACfg_UART.DstConn = GPDMA_CONN_UART0_Tx;
+	// LLI
+	GPDMACfg_UART.DMALLI = (uint32_t)&DMA_LLI_Struct_UART;
+
+	GPDMA_Setup(&GPDMACfg_UART);
+
+	// Habilito canal 0
+	GPDMA_ChannelCmd(1, ENABLE);
 }
 
-void onTimer1(){
-	TIM_ClearIntPending(LPC_TIM1, TIM_CR0_INT);
-	NVIC_EnableIRQ(TIMER1_IRQn);
-	TIM_ResetCounter(LPC_TIM1);//reseteamos el tim1
-	TIM_Cmd(LPC_TIM1, ENABLE);//Prendemos el tim1
+void actualizarMensaje(){
+	uint16_t temp=humedad;
+	uint8_t temp1=0;
+	for(uint8_t i=2;i>0;i--)
+	{
+		temp1=temp/(potencia(10, i-1));
+
+		mensaje[24-i]=temp1 + '0';
+
+		temp-=temp1*(potencia(10, i-1));
+	}
+	mensaje[25]='%';
+	//strcat(mensaje, char(humedad));
 }
 
-void offTimer1(){
-	TIM_Cmd(LPC_TIM1, DISABLE);
-	NVIC_DisableIRQ(TIMER1_IRQn);
+uint_fast16_t potencia(uint8_t numero, uint_fast8_t potencia)
+{
+	uint16_t resultado = numero;
+	while (potencia > 1)
+	{
+		resultado = resultado * numero;
+		potencia--;
+	}
+	if(potencia==0)
+	{
+		resultado=1;
+	}
+	return resultado;
 }
 
-uint32_t ControlarNivel(){
-	LPC_TIM1->EMR |= (1<<5);//pongo un 1 en MR1.0
-	onTimer2();
-	while(medido==0){}
-	uint32_t distancia;
-	distancia=(final-inicio)/59;
-	//distancia=distancia/59;//escalo medidas a cm
-	return distancia;
-}
+
+
 //handlers de interrupciones
 void ADC_IRQHandler(){
+	humedad = 100-((ADC_ChannelGetData(LPC_ADC, 0)*100)/4095);
+	actualizarMensaje();
 	//if(ADC_ChannelGetData(LPC_ADC, 0)>650){
+	//ControlarNivel();
 	int val= (LPC_ADC->ADDR0>>4 & (0xfff));
-	if(val>3800){
+
+	if((val>3800) && (distancia<20)){
 		GPIO_SetValue(0, 0x1);//enciendo la bomba
 	}
 	onTimer2();
 	offAdc();
 	//else{GPIO_ClearValue(0, 0x1);}//no hago nada}
-}
-void TIMER1_IRQHandler(){
-	if(cont==0){
-		inicio=TIM_GetCaptureValue(LPC_TIM1,TIM_COUNTER_INCAP0);
-		cont++;
-	}
-	else{
-		final=TIM_GetCaptureValue(LPC_TIM1,TIM_COUNTER_INCAP0);
-		cont=0;
-		medido=1;
-		offTimer2();
-	}
-	TIM_ClearIntPending(LPC_TIM1, TIM_CR0_INT);
 }
 
 void TIMER2_IRQHandler(){
