@@ -51,7 +51,7 @@ GPDMA_LLI_Type DMA_LLI_Struct_DAC;
 GPDMA_LLI_Type DMA_LLI_Struct_UART;
 GPDMA_Channel_CFG_Type GPDMACfg_UART;
 
-uint8_t mensaje[] = {"PORCENTAJE DE HUMEDAD: \r  \n"};
+uint8_t mensaje[30] = {"PORCENTAJE DE HUMEDAD: \r  \n"};
 
 //Estos valores ya se encuentran desplazados 6 lugares a la derecha para cargarlos en DACR
 uint32_t sinu[60]={32768, 36160, 39552, 42880, 46080, 49152, 51968, 54656, 57088, 59264
@@ -60,10 +60,7 @@ uint32_t sinu[60]={32768, 36160, 39552, 42880, 46080, 49152, 51968, 54656, 57088
 , 19456, 16384, 13568, 10880, 8448, 6272, 4416, 2880, 1664, 768, 192, 0, 192, 768, 1664
 , 2880, 4416, 6272, 8448, 10880, 13568, 16384, 19456, 22656, 25984, 29376};
 
-uint32_t medido=0;
-uint32_t inicio=0;
-uint32_t final=0;
-uint32_t distancia=0;
+int flag=0;
 uint8_t humedad=0;
 int cont=0;
 
@@ -73,8 +70,8 @@ int main(void) {
 	setTimer2Riego();
 	confUart();
 	confDMA_UART();
-	//setDMA_DAC();
-	//setDac();
+	setDMA_DAC();
+	setDac();
 	setAdc();
 	setRiegoMan();
 	onAdc();
@@ -88,7 +85,7 @@ void setPins(){
 	PINSEL_CFG_Type pinAdc;
 	PINSEL_CFG_Type pinDac;
 	PINSEL_CFG_Type pinCap;
-	//PINSEL_CFG_Type pinMatch;
+	PINSEL_CFG_Type pinArd;
 
 	pinAdc.Portnum= PINSEL_PORT_0;
 	pinAdc.Pinnum= PINSEL_PIN_23;
@@ -104,16 +101,20 @@ void setPins(){
 	pinDac.OpenDrain= PINSEL_PINMODE_NORMAL;
 	PINSEL_ConfigPin(&pinDac);//Configuramos AOUT
 
-	//pines para control de nivel de agua
-	pinCap.Portnum= PINSEL_PORT_1;
-	pinCap.Pinnum= PINSEL_PIN_18;
-	pinCap.Funcnum= PINSEL_FUNC_3;
-	pinCap.Pinmode= PINSEL_PINMODE_TRISTATE;
-	pinCap.OpenDrain= PINSEL_PINMODE_NORMAL;
-	PINSEL_ConfigPin(&pinCap);//Configuramos CAP1.0
 
-	LPC_GPIO1->FIODIR |= (1<<22);//Seteo como salida P1.22 para señal
-	LPC_GPIO1->FIOCLR |= (1<<22);//Seteo en 0
+	pinArd.Portnum= PINSEL_PORT_0;
+	pinArd.Pinnum= PINSEL_PIN_10;
+	pinArd.Funcnum= 0;
+	pinArd.Pinmode= PINSEL_PINMODE_TRISTATE;
+	pinArd.OpenDrain= PINSEL_PINMODE_NORMAL;
+	PINSEL_ConfigPin(&pinArd);//Configuramos p0.10
+	pinArd.Pinnum= PINSEL_PIN_11;
+	PINSEL_ConfigPin(&pinArd);//Configuramos p0.11
+
+	LPC_GPIO0->FIODIR &= ~(1<<10);//Seteo como salida P0.10 para señal
+	LPC_GPIO0->FIOCLR |= (1<<10);//Seteo en 0
+	LPC_GPIO0->FIODIR &= ~(1<<11);//Seteo como salida P0.10 para señal
+	LPC_GPIO0->FIOCLR |= (1<<11);//Seteo en 0
 
 	//configuramos el p0.0 como salida para riego
 	GPIO_SetDir(0, 0x1, 1);//Configuramos p0.0 como salida
@@ -210,7 +211,7 @@ void setDMA_DAC(){
 			| (2<<21)//Destino: 32bit
 			| (1<<26)//Incremento automático de la fuente
 			;
-	GPDMA_Init();
+	//GPDMA_Init();
 	GPDMACfg_DAC.ChannelNum = 0;
 	GPDMACfg_DAC.SrcMemAddr = (uint32_t)sinu;
 	GPDMACfg_DAC.DstMemAddr = 0;
@@ -236,7 +237,9 @@ void onDac(int frecuencia){
 	DAC_SetDMATimeOut(LPC_DAC,time_out);
 	GPDMA_ChannelCmd(0, ENABLE); //Enciende el modulo DMA
 }
-void offDac(){}
+void offDac(){
+	GPDMA_ChannelCmd(0, DISABLE); //Enciende el modulo DMA
+}
 
 void setRiegoMan(){
 	LPC_GPIOINT->IO0IntEnF |= (1<<21);
@@ -354,13 +357,30 @@ uint_fast16_t potencia(uint8_t numero, uint_fast8_t potencia)
 //handlers de interrupciones
 void ADC_IRQHandler(){
 	humedad = 100-((ADC_ChannelGetData(LPC_ADC, 0)*100)/4095);
+	mensaje[0]= 'Q';
+	offDac();
+
+	flag=0;
+	while(flag==0){
+		if(LPC_GPIO0->FIOPIN & (1<<10)){
+			flag=1;
+		}if(LPC_GPIO0->FIOPIN & (1<<11)){
+			flag=2;
+		}
+	}
+	mensaje[0]= 'P';
 	actualizarMensaje();
 	//if(ADC_ChannelGetData(LPC_ADC, 0)>650){
 	//ControlarNivel();
 	int val= (LPC_ADC->ADDR0>>4 & (0xfff));
 
-	if((val>3800) && (distancia<20)){
+	if((val>3800)){
+		if(flag==1){//puedo regar
 		GPIO_SetValue(0, 0x1);//enciendo la bomba
+		}
+	}
+	if(flag==2){//recargar agua
+		onDac(4500);
 	}
 	onTimer2();
 	offAdc();
