@@ -80,7 +80,6 @@ int main(void) {
 	setTimer2Riego();
 	confUart();
 	confDMA_UART();
-	setDMA_DAC();
 	setDac();
 	setAdc();
 	setRiegoMan();
@@ -255,6 +254,7 @@ void setDac(){
 //Funcion para prender el DAC
 void onDac(int frecuencia){ //hay que pasarle la frec que queremos que suene
 	uint32_t time_out=25000000/(frecuencia*60);//4500 frec de la onda
+	setDMA_DAC();
 	DAC_SetDMATimeOut(LPC_DAC,time_out);
 	GPDMA_ChannelCmd(0, ENABLE); //Enciende el modulo DMA channel0
 }
