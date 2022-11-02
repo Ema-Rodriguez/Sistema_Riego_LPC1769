@@ -4,6 +4,7 @@ const int Echo = 3;      //Pin digital 3 para el Echo del sensor
 char dato;               //Dato proveniente de LPC1769
 const int Salida = 10;   //Salida de nivel de agua
 const int Salida1= 11;   //Salida nivel de agua
+int flag=0;
 
 
 void setup() {
@@ -45,13 +46,17 @@ void loop()
         else{                       //significa que hay agua
           digitalWrite(Salida, HIGH); //Ponemos el pin 10 en 1
           }
+        flag=1;
         delay(1);
         digitalWrite(Salida, LOW);    //Ponemos el pin 10 en 0
         digitalWrite(Salida1, LOW);   //Ponemos el pin 11 en 0
     }
-    else{
+    else if(flag==0){
         Serial.print(dato);
       }
+    else if(flag==1 && dato=='\n'){
+      flag=0;
+    }
     }
 
 }
