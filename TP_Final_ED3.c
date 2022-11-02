@@ -3,8 +3,8 @@
  Name        : TP_Final_ED3.c
  Author      : $Brian Gerard, Emanuel Rodriguez
  Version     : 1
- Copyright   : 
- Description : Control de riego de una planta mediante sensor de humedad, 
+ Copyright   :
+ Description : Control de riego de una planta mediante sensor de humedad,
  manejo de bomba hidraulica y sensor ultrasonico para medir nivel de agua
 ===============================================================================
 */
@@ -79,6 +79,7 @@ int main(void) {
 	setTimer0Adc();
 	setTimer2Riego();
 	confUart();
+	GPDMA_Init();
 	confDMA_UART();
 	setDac();
 	setAdc();
@@ -306,14 +307,14 @@ void confDMA_UART(void)
 {
 	DMA_LLI_Struct_UART.SrcAddr= (uint32_t)mensaje;//el source va a ser el mensaje
 	DMA_LLI_Struct_UART.DstAddr= (uint32_t)&LPC_UART0->THR;//el destination UART
-	DMA_LLI_Struct_UART.NextLLI= (uint32_t)&DMA_LLI_Struct_UART;
+	DMA_LLI_Struct_UART.NextLLI= 0;//(uint32_t)&DMA_LLI_Struct_UART;
 	DMA_LLI_Struct_UART.Control= sizeof(mensaje)
 		| 	(2<<12)
 		| 	(1<<26) //source increment
 		;
 
 	NVIC_DisableIRQ(DMA_IRQn);// Desabilito la interrupcion de GPDMA
-	GPDMA_Init();// Inicializo controlador de GPDMA
+	//GPDMA_Init();// Inicializo controlador de GPDMA
 
 	GPDMACfg_UART.ChannelNum = 1;
 	GPDMACfg_UART.SrcMemAddr = (uint32_t)mensaje;
@@ -361,6 +362,7 @@ uint_fast16_t potencia(uint8_t numero, uint_fast8_t potencia)
 void controlarNivel(){
 	mensaje[0]= 'Q';//mensaje para diferenciar en arduino
 	flag=0; //variable para que se mantenga en un bucle hasta que llegue la señal de medicion
+	confDMA_UART();
 	while(flag==0){
 		if(LPC_GPIO0->FIOPIN & (1<<10)){
 			flag=1;
@@ -369,6 +371,7 @@ void controlarNivel(){
 		}
 	}
 	mensaje[0]= 'P';
+	confDMA_UART();
 }
 
 /*********************************************************************************/
@@ -382,7 +385,8 @@ void ADC_IRQHandler(){
 	actualizarMensaje();//actualiza mensaje UART
 	int val= (LPC_ADC->ADDR0>>4 & (0xfff));//valor leido ADC
 
-	if((val>3800)){
+	//if((val>3800)){
+	if(humedad<40){
 		if(flag==1){//puedo regar
 		GPIO_ClearValue(0, 0x1);//enciendo la bomba
 		}
