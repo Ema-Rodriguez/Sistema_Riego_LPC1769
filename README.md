@@ -29,3 +29,25 @@ Para el envío de datos mediante UART y el envío de los valores de la senoidal 
 
 
 ------------
+
+####  Configuraciones:
+##### GPIO
+###### Salida:    
+P0.0(Envia señal para activar la bomba)
+###### Entradas:     
+P0.21(Mediante interrupcion activamos riego manual)
+P0.10(Activa flag=1)
+P0.11(Activa flag=2)
+##### PINSEL    
+Func 1:    P0.23 (ADC 0.0); P0.2,P0.3 (UART 0.0);
+Func 2:     P0.26(AOUT)  
+ADC0.0:Convierte valores analogicos recibidos de el sensor de humedad a digital.
+##### DAC: 
+Convierte valores de un arreglo que contiene una señal senoidal.
+##### TIMER0: 
+Es el cual activara nuestro adc configurado para togglear el mat0.1 cada 30 segundos
+##### TIMER2:
+Tiene 2 match el primero en 5 seg el cual apagará la bomba y el siguiente en 15 segundo el cual apagara el timer2 y encendera el timer0 para volver a manejar el adc.
+#####DMA:
+Chanel 0: Encargado de enviar el arreglo de la señal senoidal a nuestro DAC
+Chanel 1: Encargado de enviar nuestro mensaje y porcentaje de humedad a nuestro UART 
