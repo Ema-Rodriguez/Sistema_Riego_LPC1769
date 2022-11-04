@@ -131,8 +131,6 @@ void setPins(){
 	LPC_PINCON->PINMODE0 |= (1<<1);
 	GPIO_SetDir(0, 0x1, 1);//Configuramos p0.0 como salida
 	LPC_GPIO0->FIOCLR |=(1<<0); //Seteo en 0 la salida
-	LPC_GPIO0->FIODIR |=(1<<1);
-	LPC_GPIO0->FIOSET |=(1<<1);
 
 	//configuramos el p0.21 Para activar riego manual
 	LPC_GPIO0->FIODIR &= ~(1<<21);//P0.21 como entrada
@@ -391,7 +389,6 @@ void ADC_IRQHandler(){
 	if(humedad<40){
 		if(flag==1){//puedo regar
 		GPIO_SetValue(0, 0x1);//enciendo la bomba
-		LPC_GPIO0->FIOCLR |= (1<<1);
 		}
 	}
 	if(flag==2){//significa que no tengo agua suficiente
@@ -404,7 +401,6 @@ void ADC_IRQHandler(){
 void TIMER2_IRQHandler(){
 	if(TIM_GetIntStatus(LPC_TIM2, TIM_MR0_INT)==SET){//pregunto si interrumpio MAT2.0
 		GPIO_ClearValue(0, 0x1);//Apago la bomba
-		LPC_GPIO0->FIOSET |= (1<<1);
 	}else if(TIM_GetIntStatus(LPC_TIM2, TIM_MR1_INT)==SET){//pregunto si interrumpio MAT2.1
 		offTimer2();//apago TIMER2
 		onAdc();//prendo ADC
@@ -416,7 +412,6 @@ void TIMER2_IRQHandler(){
 void EINT3_IRQHandler(){
 	onTimer2();//prendo TIMER2
 	GPIO_SetValue(0, 0x1);//prendo la bomba
-	LPC_GPIO0->FIOCLR |= (1<<1);
 	LPC_GPIOINT->IO0IntClr |= (1<<21);//limpio flags de interrupcion
 }
 
