@@ -49,7 +49,7 @@ Es el cual activara nuestro adc configurado para togglear el mat0.1 cada 30 segu
 ##### TIMER2:
 Tiene 2 match el primero en 5 seg el cual apagará la bomba y el siguiente en 15 segundo el cual apagara el timer2 y encendera el timer0 para volver a manejar el adc.
 
-#####DMA:
+##### DMA:
 
 Chanel 0: Encargado de enviar el arreglo de la señal senoidal a nuestro DAC
 Chanel 1: Encargado de enviar nuestro mensaje y porcentaje de humedad a nuestro UART 
