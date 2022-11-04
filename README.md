@@ -1,2 +1,4 @@
-# TP-Digital-3 
-Sistema de control de riego automatico con sensor de humedad LPC1769
+# Sistema de control de riego automatico con sensor de humedad LPC1769
+Trabajo final de la materia Electrónica Digital 3 realizado en la FCEFyN UNC
+
+En el mismo se utiliza ADC, DAC, TIMER, DMA, UART entre otras cosas
